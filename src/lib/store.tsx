@@ -290,9 +290,18 @@ export function timeline(s: AppState): Ev[] {
     {
       date: BILL_DATE,
       label: (x) => (x.numbers.kind === "staff" ? `${x.numbers.staffName.replace(/\s*\(.*\)$/, "") || "Your staff"} sends ${USAGE_MONTH}'s numbers` : `${USAGE_MONTH}'s bills are ready`),
-      wait: (x) =>
-        Object.values(x.invites).some((i) => i.status !== "accepted") ? "Waiting for everyone to accept" : x.stage !== "live" ? "Waiting for you to open Home" : null,
+      wait: (x) => {
+        const stuck = x.people.find((p) => x.invites[p.id]?.status === "question" || x.invites[p.id]?.status === "declined");
+        if (stuck) return `Waiting for you to reply to ${stuck.name}`;
+        return x.stage !== "live" ? "Waiting for you to open Home" : null;
+      },
       run: (x) => {
+        // Colleagues still just "waiting" (e.g. after the split was re-sent) accept now, so the demo never stalls.
+        for (const p of x.people)
+          if (x.invites[p.id]?.status !== "accepted") {
+            x.invites[p.id] = { ...x.invites[p.id], status: "accepted" };
+            addHistory(x, p.id, "Accepted the split");
+          }
         if (x.numbers.kind === "staff" && countCosts(x).length) {
           x.counts = demoCounts(x);
           x.countsFrom = "staff";
