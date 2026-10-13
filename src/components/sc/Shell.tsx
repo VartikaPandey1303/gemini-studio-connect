@@ -15,7 +15,7 @@ import {
   SkipForward,
   X,
 } from "lucide-react";
-import { ACCOUNT, OWNER, TIMELINE, nextInfo, useStore, type View } from "@/lib/store";
+import { ACCOUNT, OWNER, advance, nextInfo, useStore, type View } from "@/lib/store";
 import { fmtDate } from "@/lib/rules";
 import { homeCards } from "./owner";
 
@@ -74,7 +74,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 }
 
 function DemoBar() {
-  const { s, update, reset, showToast } = useStore();
+  const { s, update, reset, showToast, evalView } = useStore();
   const info = nextInfo(s);
   const roles = [{ id: OWNER, label: "Meera's app" }, ...s.people.map((p) => ({ id: p.id, label: `${p.name}'s phone` }))];
   return (
@@ -96,19 +96,20 @@ function DemoBar() {
         className="inline-flex items-center gap-1 rounded bg-primary px-2.5 py-1 font-medium"
         onClick={() => {
           if (info.wait) return showToast(info.wait);
-          const ev = TIMELINE[s.step];
-          if (!ev) return;
+          let msg: string | null = null;
           update((d) => {
-            d.today = ev.date > d.today ? ev.date : d.today;
-            ev.run(d);
-            d.step++;
+            msg = advance(d);
+            if (msg) msg = `${fmtDate(d.today)} · ${msg}`;
           });
-          showToast(`${fmtDate(ev.date)} · ${ev.label}`);
+          window.setTimeout(() => msg && showToast(msg), 0);
         }}
       >
         <SkipForward className="h-3 w-3" /> Next
       </button>
       <span className="min-w-0 flex-1 truncate opacity-70">{info.wait ?? `Next: ${info.label}`}</span>
+      <a className="opacity-80 underline-offset-2 hover:underline hover:opacity-100" href={evalView ? "?demo" : "?demo&eval"}>
+        {evalView ? "Back to app" : "AI log"}
+      </a>
       <button className="inline-flex items-center gap-1 opacity-80 hover:opacity-100" onClick={reset}>
         <RotateCcw className="h-3 w-3" /> Restart
       </button>
@@ -120,7 +121,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const { s, update, demo } = useStore();
   const [menu, setMenu] = useState(false);
   const live = s.stage === "live";
-  const badge = homeCards(s).length;
+  const badge = homeCards(s).filter((c) => c.id !== "sum").length;
   const tab = (v: View, label: string, b?: number) => {
     const active = s.view === v || (v === "home" && !["people", "settings"].includes(s.view) && !s.view.startsWith("person:"));
     const activePeople = v === "people" && s.view.startsWith("person:");

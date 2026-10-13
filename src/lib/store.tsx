@@ -450,6 +450,7 @@ interface Ctx {
   toast: string | null;
   showToast: (t: string) => void;
   demo: boolean;
+  evalView: boolean;
 }
 const C = createContext<Ctx | null>(null);
 
@@ -457,8 +458,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<AppState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
+  const [evalView, setEval] = useState(false);
   useEffect(() => {
-    setDemo(new URLSearchParams(window.location.search).has("demo"));
+    const q = new URLSearchParams(window.location.search);
+    setDemo(q.has("demo"));
+    setEval(q.has("demo") && q.has("eval"));
     try {
       const raw = localStorage.getItem(KEY);
       const parsed = raw ? (JSON.parse(raw) as AppState) : null;
@@ -484,7 +488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const reset = useCallback(() => setS(initialState()), []);
   if (!s) return <div className="min-h-screen bg-background" />;
-  return <C.Provider value={{ s, update, reset, toast, showToast, demo }}>{children}</C.Provider>;
+  return <C.Provider value={{ s, update, reset, toast, showToast, demo, evalView }}>{children}</C.Provider>;
 }
 
 export function useStore() {

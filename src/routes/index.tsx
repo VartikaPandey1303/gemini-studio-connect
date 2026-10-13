@@ -6,6 +6,7 @@ import { Bills, Home, People, PersonDetail, Replies, Settings, Summary } from "@
 import { Decision } from "@/components/sc/Decision";
 import { ColleaguePage } from "@/components/sc/Colleague";
 import { Toast } from "@/components/sc/ui";
+import { AiLog } from "@/components/sc/AiLog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,7 +23,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Owner() {
-  const { s } = useStore();
+  const { s, evalView } = useStore();
+  if (evalView) return <AiLog />;
   if (s.stage !== "live" && s.stage !== "replies") return <Setup />;
   if (s.stage === "replies") return <Replies />;
   const v = s.view;
@@ -37,7 +39,7 @@ function Owner() {
 
 function App() {
   const { s } = useStore();
-  if (s.role !== OWNER && s.people.some((p) => p.id === s.role))
+  if (!useStore().evalView && s.role !== OWNER && s.people.some((p) => p.id === s.role))
     return (
       <PhoneFrame>
         <ColleaguePage pid={s.role} />
