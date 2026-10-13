@@ -1,29 +1,18 @@
-# Welcome to your Lovable project
+# Shared Collect — a Razorpay Agent Studio agent for shared monthly costs
 
-This project was built with [Lovable](https://lovable.dev).
+Small businesses that share fixed monthly costs (a machine EMI, rent, a salary) chase colleagues for their share every month.
+Shared Collect turns a plain-language description into a split, bills everyone through Razorpay Invoices, and helps when someone asks for more time.
+**AI reads and proposes. Rules compute every rupee. You approve.**
 
-## Build with Lovable
+## Run the demo
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+1. Open the app with `?demo` at the end of the address (e.g. `https://gemini-finance-flow.lovable.app/?demo`).
+2. Use **Fill example** on each setup step (or enter your own colleagues and costs).
+3. Press **Next** in the black demo bar to move through the month. Use the dropdown to see a colleague's phone, and **AI log** to see every AI call.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+## How the AI works
 
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+- Google Gemini runs on the server through Lovable AI — it reads the cost description, reads WhatsApp replies (including Hinglish) and drafts messages.
+- Every amount comes from the rules engine in `src/lib/rules.ts` (tested in `src/lib/rules.test.ts`). The AI never calculates money.
+- Any AI message whose ₹ amounts differ from the rules is rejected.
+- If the AI is unavailable, built-in rules take over and the screen shows "AI · built-in rules".
