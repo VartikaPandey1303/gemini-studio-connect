@@ -276,32 +276,45 @@ export function timeline(s: AppState): Ev[] {
       },
     },
     {
+      // Anyone who asked a question (the scripted asker, or anyone the presenter typed as) accepts once answered.
       date: "2026-08-28",
-      label: (x) => `${nm(x, r.asker)} accepts after your answer`,
-      skip: () => !r.asker || !(r.late !== r.asker ? r.late : r.onTime),
-      wait: (x) => (r.asker && x.invites[r.asker]?.status === "question" ? `Waiting for you to answer ${nm(x, r.asker)}` : null),
+      label: (x) => {
+        const names = x.people.filter((p) => ["waiting", "question"].includes(x.invites[p.id]?.status ?? "")).map((p) => p.name);
+        return `${joinNames(names)} accept${names.length === 1 ? "s" : ""} after your answer`;
+      },
+      skip: (x) => !x.people.some((p) => ["waiting", "question"].includes(x.invites[p.id]?.status ?? "")),
+      wait: (x) => {
+        const q = x.people.find((p) => x.invites[p.id]?.status === "question");
+        return q ? `Waiting for you to answer ${q.name}` : null;
+      },
       run: (x) => {
-        if (r.asker && x.invites[r.asker]?.status !== "accepted") {
-          x.invites[r.asker] = { ...x.invites[r.asker], status: "accepted" };
-          addHistory(x, r.asker, "Accepted the split");
-        }
+        for (const p of x.people)
+          if (x.invites[p.id]?.status === "waiting") {
+            x.invites[p.id] = { ...x.invites[p.id], status: "accepted" };
+            addHistory(x, p.id, "Accepted the split");
+          }
       },
     },
     {
       date: BILL_DATE,
       label: (x) => (x.numbers.kind === "staff" ? `${x.numbers.staffName.replace(/\s*\(.*\)$/, "") || "Your staff"} sends ${USAGE_MONTH}'s numbers` : `${USAGE_MONTH}'s bills are ready`),
+      // Only an unanswered question blocks: the presenter must answer it. Everything else moves on by itself.
       wait: (x) => {
-        const stuck = x.people.find((p) => x.invites[p.id]?.status === "question" || x.invites[p.id]?.status === "declined");
-        if (stuck) return `Waiting for you to reply to ${stuck.name}`;
-        return x.stage !== "live" ? "Waiting for you to open Home" : null;
+        const q = x.people.find((p) => x.invites[p.id]?.status === "question");
+        return q ? `Waiting for you to answer ${q.name}` : null;
       },
       run: (x) => {
-        // Colleagues still just "waiting" (e.g. after the split was re-sent) accept now, so the demo never stalls.
+        // Anyone still not accepted (waiting, re-sent, or declined and then talked to) accepts now, so the demo never stalls.
         for (const p of x.people)
           if (x.invites[p.id]?.status !== "accepted") {
             x.invites[p.id] = { ...x.invites[p.id], status: "accepted" };
             addHistory(x, p.id, "Accepted the split");
           }
+        // If the presenter never pressed "Go to Home", take them there.
+        if (x.stage !== "live") {
+          x.stage = "live";
+          x.view = "home";
+        }
         if (x.numbers.kind === "staff" && countCosts(x).length) {
           x.counts = demoCounts(x);
           x.countsFrom = "staff";
