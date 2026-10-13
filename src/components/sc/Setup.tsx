@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Lock, Plus, Trash2, Check as CheckIcon, AlertTriangle, MessageCircle, Eye, HelpCircle } from "lucide-react";
 import { ACCOUNT, DEMO_PEOPLE, DEMO_TEXT, OWNER, countCosts, ids, newId, personName, useStore, type AppState } from "@/lib/store";
@@ -89,7 +89,10 @@ function Welcome() {
 }
 
 function PeopleStep() {
-  const { s, update } = useStore();
+  const { s, update, demo } = useStore();
+  useEffect(() => {
+    if (demo) update((d) => void (!d.people.some((p) => p.name.trim()) && (d.people = structuredClone(DEMO_PEOPLE))));
+  }, [demo, update]);
   const named = s.people.filter((p) => p.name.trim());
   return (
     <Flow
@@ -151,6 +154,9 @@ function PeopleStep() {
 function Describe() {
   const { s, update, demo } = useStore();
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (demo) update((d) => void (!d.description.trim() && (d.description = DEMO_TEXT)));
+  }, [demo, update]);
   return (
     <Flow
       step="Step 2 of 4"
@@ -453,7 +459,10 @@ function Check() {
 }
 
 function Numbers() {
-  const { s, update } = useStore();
+  const { s, update, demo } = useStore();
+  useEffect(() => {
+    if (demo) update((d) => void (!d.numbers.kind && (d.numbers = { kind: "staff", staffName: "Sunita (front desk)", staffPhone: "98200 44444" })));
+  }, [demo, update]);
   const n = s.numbers;
   const why = !n.kind ? "Pick one" : n.kind === "staff" && !n.staffName.trim() ? "Add who sends them" : null;
   const opts = [
