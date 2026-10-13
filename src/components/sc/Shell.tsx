@@ -62,7 +62,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <Bot className="h-4 w-4" /> All agents
         </div>
         <div className="flex items-center gap-3 rounded-md bg-nav-active px-3 py-2 font-medium">
-          <Sparkles className="h-4 w-4 text-primary" /> Shared costs
+          <Sparkles className="h-4 w-4 text-primary" /> Shared Collect
         </div>
       </nav>
       <div className="border-t border-nav-active px-5 py-4 text-xs text-nav-muted">
@@ -158,7 +158,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <span className="hidden sm:inline">Agent Studio</span>
               <ChevronRight className="hidden h-3.5 w-3.5 sm:inline" />
-              <span className="font-medium text-foreground">Shared costs</span>
+              <span className="font-medium text-foreground">Shared Collect</span>
             </div>
             <div className="ml-auto flex items-center gap-2 text-sm">
               <span className="hidden sm:inline text-muted-foreground">{ACCOUNT.business}</span>
@@ -172,7 +172,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold">Shared costs agent</h2>
+                  <h2 className="font-semibold">Shared Collect · shared costs agent</h2>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${live ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"}`}>
                     {live ? "● Live" : "Setting up"}
                   </span>

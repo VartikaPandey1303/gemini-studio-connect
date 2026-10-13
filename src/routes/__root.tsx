@@ -78,7 +78,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Shared costs agent — Razorpay Agent Studio" },
+      { title: "Shared Collect — Razorpay Agent Studio" },
       { name: "description", content: "Share a fixed monthly cost with colleagues, without the follow-ups." },
     ],
     links: [
