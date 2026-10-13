@@ -97,6 +97,7 @@ function DemoBar() {
         onClick={() => {
           if (info.wait) return showToast(info.wait);
           const ev = TIMELINE[s.step];
+          if (!ev) return;
           update((d) => {
             d.today = ev.date > d.today ? ev.date : d.today;
             ev.run(d);

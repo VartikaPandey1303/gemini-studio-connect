@@ -135,7 +135,7 @@ Rules:
 Known people: ${data.people.join(", ")} (plus the owner, "me").`;
     const r = await gemini(sys, data.text, splitSchema);
     if (!r.ok) return r;
-    const j = parseJson<{ costs: unknown[] }>(r.data);
+    const j = parseJson<{ costs: Record<string, any>[] }>(r.data);
     if (!j || !Array.isArray(j.costs)) return { ok: false as const, error: "The AI answer couldn't be read." };
     return { ok: true as const, data: j };
   });

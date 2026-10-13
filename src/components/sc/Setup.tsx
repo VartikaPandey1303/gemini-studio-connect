@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Plus, Trash2, Check, AlertTriangle, MessageCircle, Eye, HelpCircle } from "lucide-react";
+import { Lock, Plus, Trash2, Check as CheckIcon, AlertTriangle, MessageCircle, Eye, HelpCircle } from "lucide-react";
 import { ACCOUNT, DEMO_PEOPLE, DEMO_TEXT, OWNER, countCosts, ids, newId, personName, useStore, type AppState } from "@/lib/store";
 import { draftSplit, type AiMeta } from "@/lib/ai";
 import { computeShares, fractionWords, money, ordinal, type Cost, type Method } from "@/lib/rules";
@@ -506,7 +506,7 @@ function Send() {
         </div>
       ))}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Check className="h-3.5 w-3.5 text-ok" /> Nothing is billed until everyone accepts.
+        <CheckIcon className="h-3.5 w-3.5 text-ok" /> Nothing is billed until everyone accepts.
       </div>
       {preview && <ColleaguePreview pid={preview} onClose={() => setPreview(null)} />}
     </Flow>
