@@ -6,6 +6,7 @@ import {
   localReadMessage,
   localWrite,
   PLAN_ENDING,
+  reasonEn,
   type Draft,
   type ReadResult,
   type Tone,
@@ -59,7 +60,7 @@ export async function write(kind: WriteKind, tone: Tone, ctx: WriteCtx): Promise
     amounts = ctx.parts.map((p) => p.amount);
     brief = `${ctx.name} asked for more time to pay. Ask them to pay ${ctx.parts
       .map((p) => `${money(p.amount)} by ${fmtDate(p.date)}`)
-      .join(" and the rest, ")}. Explain briefly the first part is needed because the owner pays salary on 7 Oct.`;
+      .join(" and the rest, ")}.${ctx.reason ? ` Explain briefly the first part is needed because ${reasonEn(ctx.reason)}.` : ""}`;
     mustEndWith = PLAN_ENDING;
   } else if (kind === "answer") {
     brief = `${ctx.name} asked: "${ctx.question}". Answer using only these facts: ${ctx.facts}. Do not mention any rupee amount.`;
