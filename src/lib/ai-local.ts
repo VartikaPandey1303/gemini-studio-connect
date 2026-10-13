@@ -219,7 +219,7 @@ export function localWrite(kind: "plan" | "answer" | "nudge" | "due", tone: Tone
     if (tone === "warm")
       return `${n} ji, koi baat nahi, samajh sakti hoon. Bas ek request — kya ${money(p1.amount)} ${fmtDate(p1.date)} tak bhej sakte ho? ${ctx.reason ? reasonHi(ctx.reason) : ""}${rest} ${PLAN_ENDING}`;
     if (tone === "direct")
-      return `${n}, ${money(p1.amount)} ${fmtDate(p1.date)} tak chahiye — ${ctx.reason ? reasonEn(ctx.reason).replace(/^my /, "mera ").replace(/ goes out on | go out on /, " ") + " ko jaata hai" : "mere payments due hain"}.${rest} ${PLAN_ENDING}`;
+      return `${n}, ${money(p1.amount)} ${fmtDate(p1.date)} tak chahiye${ctx.reason ? ` — ${reasonEn(ctx.reason)}` : " — mere payments due hain"}.${rest} ${PLAN_ENDING}`;
     return `Dear ${n}, thank you for letting me know. Could you please pay ${money(p1.amount)} by ${fmtDate(p1.date)}${ctx.reason ? `, as ${reasonEn(ctx.reason)}` : ""}?${p2 ? ` The remaining ${money(p2.amount)} can come by ${fmtDate(p2.date)}.` : ""} ${PLAN_ENDING}`;
   }
   if (kind === "answer")
