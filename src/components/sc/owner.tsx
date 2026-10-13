@@ -305,10 +305,10 @@ function parseCsv(text: string, s: AppState): { counts: Counts; ignored: string[
 
 export function Bills() {
   const { s, update, showToast } = useStore();
-  const [step, setStep] = useState<"numbers" | "review">(s.counts ? "review" : "numbers");
+  const [step, setStep] = useState<"numbers" | "review">(s.counts || !countCosts(s).length ? "review" : "numbers");
   const [open, setOpen] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const measures = countCosts(s).map((c) => c.measure!);
+  const measures = countCosts(s).map((c) => c.measure ?? "");
   const counts = s.counts ?? {};
   const missing = measures.some((m) => ids(s).some((id) => counts[m]?.[id] === undefined));
   if (step === "numbers" || !measures.every((m) => counts[m]))
