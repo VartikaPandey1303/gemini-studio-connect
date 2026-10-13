@@ -183,7 +183,7 @@ export function Replies() {
                 d.stage = "live";
                 d.view = "home";
               });
-              showToast("Shared costs agent is live");
+              showToast("Shared Collect is live");
             }}
           >
             Go to Home

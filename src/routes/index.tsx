@@ -11,9 +11,9 @@ import { AiLog } from "@/components/sc/AiLog";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Shared costs agent — Razorpay Agent Studio" },
+      { title: "Shared Collect — Razorpay Agent Studio" },
       { name: "description", content: "Split a fixed monthly cost with colleagues, bill everyone, and handle late payments. AI reads and proposes, rules compute every rupee, you approve." },
-      { property: "og:title", content: "Shared costs agent — Razorpay Agent Studio" },
+      { property: "og:title", content: "Shared Collect — Razorpay Agent Studio" },
       { property: "og:description", content: "AI reads and proposes. Rules compute every rupee. You approve." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
