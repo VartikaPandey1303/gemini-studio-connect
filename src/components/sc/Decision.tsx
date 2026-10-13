@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Quote } from "lucide-react";
-import { ACCOUNT, DUE_DATE, OUT_MONTH, addHistory, expectedInflows, gapFor, paidBy, personName, useStore, type Decision as D } from "@/lib/store";
+import { ACCOUNT, DUE_DATE, OUT_MONTH, USAGE_MONTH, addHistory, expectedInflows, gapFor, keyReason, paidBy, paidLateBefore, personName, useStore, type Decision as D } from "@/lib/store";
 import { readMessage, write, type AiMeta } from "@/lib/ai";
 import { amountsMatch, fmtDate, money, outflows, planSizing, type Part } from "@/lib/rules";
 import { PLAN_ENDING, type Tone } from "@/lib/ai-local";
@@ -14,6 +14,34 @@ export function Decision({ id }: { id: string }) {
   if (d.kind === "nudge") return <Nudge d={d} />;
   if (d.kind === "counter") return <Counter d={d} />;
   return <MessageReply d={d} />;
+}
+
+/** Plain-sight permissions, shown on every decision screen. */
+function Permissions() {
+  const { update } = useStore();
+  return (
+    <p className="border-t pt-3 text-xs text-muted-foreground">
+      The agent can remind people and suggest plans. It can't change anyone's share, waive money or send anything without you.{" "}
+      <button className="text-primary underline-offset-2 hover:underline" onClick={() => update((x) => void (x.view = "settings"))}>
+        Change in Settings
+      </button>
+      .
+    </p>
+  );
+}
+
+function Learned() {
+  return <div className="rounded-md bg-ai-soft px-3 py-2 text-xs font-medium text-ai">Using what the agent learned in {USAGE_MONTH}</div>;
+}
+
+/** Dates after the due date until the end of the month bills are paid in. */
+function dateOptions(current: string) {
+  const out: string[] = [];
+  const [y, m] = OUT_MONTH.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  for (let d = 1; d <= last; d++) out.push(`${OUT_MONTH}-${String(d).padStart(2, "0")}`);
+  if (!out.includes(current)) out.push(current);
+  return out.sort();
 }
 
 function Gone() {
@@ -88,6 +116,7 @@ function MoreTime({ d }: { d: D }) {
   const parts: Part[] = auto.length === 1 && p1Edit === null ? auto : [{ amount: p1, date: DUE_DATE }, ...(left - p1 > 0 ? [{ amount: left - p1, date: namedDate }] : [])].filter((p) => p.amount > 0);
   const amounts = parts.map((p) => p.amount);
   const key = parts.map((p) => `${p.amount}@${p.date}`).join("|");
+  const reason = keyReason(s, wait.date);
 
   const [drafts, setDrafts] = useState<Partial<Record<Tone, { text: string } & AiMeta>>>({});
   const [tone, setTone] = useState<Tone | null>(s.tone);
@@ -101,7 +130,7 @@ function MoreTime({ d }: { d: D }) {
     setDrafts({});
     const tones: Tone[] = firstTime ? ["warm", "direct", "formal"] : [tone ?? "warm"];
     tones.forEach((t) =>
-      write("plan", t, { ownerName: ACCOUNT.owner, name: short(name), parts }).then((r) => {
+      write("plan", t, { ownerName: ACCOUNT.owner, name: short(name), parts, reason }).then((r) => {
         if (!live) return;
         setDrafts((x) => ({ ...x, [t]: r }));
         if (!firstTime) setText(r.text);
@@ -119,7 +148,7 @@ function MoreTime({ d }: { d: D }) {
 
   const send = (msg: string, t: Tone) => {
     update((x) => {
-      x.plans[pid] = { parts, status: "offered", message: msg };
+      x.plans[pid] = { parts, status: "offered", message: msg, reason };
       x.tone = t;
       addHistory(x, pid, `You offered a plan: ${parts.map((p) => `${money(p.amount)} by ${fmtDate(p.date)}`).join(", ")}`);
       const k = x.decisions.find((k) => k.id === d.id);
@@ -186,7 +215,7 @@ function MoreTime({ d }: { d: D }) {
               }}
             />
             Count on {p.name} paying by {fmtDate(DUE_DATE)}
-            {p.lateBefore && <span className="text-muted-foreground">(paid late before)</span>}
+            {paidLateBefore(s, p.id) && <span className="text-muted-foreground">(paid late before)</span>}
           </label>
         ))}
         <div className={`mt-5 rounded-lg p-4 ${wait.gap ? "bg-bad-soft" : "bg-ok-soft"}`}>
@@ -207,7 +236,7 @@ function MoreTime({ d }: { d: D }) {
               <input
                 className="field num mt-1 text-base text-foreground"
                 inputMode="numeric"
-                value={p1}
+                value={money(p1)}
                 onChange={(e) => setP1Edit(Math.min(left, Number(e.target.value.replace(/\D/g, "")) || 0))}
               />
             </label>
@@ -215,11 +244,20 @@ function MoreTime({ d }: { d: D }) {
               The rest, by the date they named
               <div className="mt-1 flex gap-2">
                 <span className="num flex-1 py-2 text-base text-foreground">{money(left - p1)}</span>
-                <input type="date" className="field num w-auto" value={namedDate} onChange={(e) => setNamed(e.target.value)} />
+                <select className="field num w-auto" aria-label="Date for the rest" value={namedDate} onChange={(e) => setNamed(e.target.value)}>
+                  {dateOptions(namedDate).map((o) => (
+                    <option key={o} value={o}>
+                      {fmtDate(o)}
+                    </option>
+                  ))}
+                </select>
               </div>
             </label>
           </div>
           {sum !== left && <div className="text-xs text-warn">Parts must add up to {money(left)}</div>}
+          <p className="text-xs text-muted-foreground">
+            First part = what you'd be short on {fmtDate(wait.date)} (<span className="num">{money(wait.gap)}</span>), never more than they owe. The {fmtDate(DUE_DATE)} due date doesn't move.
+          </p>
 
           {firstTime ? (
             <>
@@ -231,7 +269,6 @@ function MoreTime({ d }: { d: D }) {
                     <div key={t} className="card flex flex-col p-4">
                       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ai">{t}</div>
                       {dr ? <p className="flex-1 text-sm">{dr.text}</p> : <div className="h-24 flex-1 animate-pulse rounded bg-muted" />}
-                      {dr?.note && <p className="mt-2 text-[11px] text-muted-foreground">{dr.note}</p>}
                       <button className="btn-primary mt-3" disabled={!dr || !!msgWhy(dr.text) || sum !== left} onClick={() => dr && send(dr.text, t)}>
                         Send this one
                       </button>
@@ -255,7 +292,6 @@ function MoreTime({ d }: { d: D }) {
               ) : (
                 <div className="h-[110px] animate-pulse rounded-md bg-card" />
               )}
-              {drafts[tone ?? "warm"]?.note && <p className="text-[11px] text-muted-foreground">{drafts[tone ?? "warm"]?.note}</p>}
               <div className="flex flex-col items-end gap-1">
                 <Primary
                   label={`Send to ${name}`}
@@ -281,8 +317,9 @@ function MoreTime({ d }: { d: D }) {
           showToast(`Sent to ${name} on WhatsApp`);
         }}
       >
-        {busy ? "Sending…" : `Ask for the full ${money(left)} by ${fmtDate(DUE_DATE)} instead`}
+        {busy ? "Sending…" : `Ask for the full ${money(left)} by ${fmtDate(DUE_DATE)}${s.permissions.plan ? " instead" : ""}`}
       </button>
+      <Permissions />
     </Flow>
   );
 }
@@ -290,41 +327,53 @@ function MoreTime({ d }: { d: D }) {
 function Nudge({ d }: { d: D }) {
   const { s, update, showToast } = useStore();
   const name = personName(s, d.personId);
-  const amount = (s.bills?.[d.personId] ?? 0) - paidBy(s, d.personId);
+  const amount = d.amount ?? (s.bills?.[d.personId] ?? 0) - paidBy(s, d.personId);
+  const due = d.due ?? DUE_DATE;
+  const tone = d.tone ?? s.tone ?? "warm";
+  const required = d.plan ? d.plan.map((p) => p.amount) : [amount];
   const [draft, setDraft] = useState<{ text: string } & AiMeta>();
   const [text, setText] = useState("");
   useEffect(() => {
-    write("nudge", s.tone ?? "warm", { ownerName: ACCOUNT.owner, name: short(name), amount, due: DUE_DATE }).then((r) => {
+    const job = d.plan
+      ? write("plan", tone, { ownerName: ACCOUNT.owner, name: short(name), parts: d.plan, reason: d.reason })
+      : write("nudge", tone, { ownerName: ACCOUNT.owner, name: short(name), amount, due });
+    job.then((r) => {
       setDraft(r);
       setText(r.text);
     });
   }, [d.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Flow
-      title={`${name} may pay late`}
-      sub={`They paid after the due date before. ${money(amount)} is due on ${fmtDate(DUE_DATE)}, 3 days from now.`}
+      title={d.plan ? `Plan for ${name}, ready in the ${tone} tone` : `${name} may pay late`}
+      sub={
+        d.plan
+          ? `Last month ${name} asked for more time. The plan is drafted in the tone you picked, with the same parts: ${d.plan.map((p) => `${money(p.amount)} by ${fmtDate(p.date)}`).join(", ")}.`
+          : `They paid after the due date before. ${money(amount)} is due on ${fmtDate(due)}, 3 days from now.`
+      }
       onBack={() => update((x) => void (x.view = "home"))}
       primary={
         <Primary
-          label={`Send reminder to ${name}`}
-          why={!draft ? "Drafting…" : !amountsMatch(text, [amount]) ? `The message must show ${money(amount)} exactly` : null}
+          label={d.plan ? `Send plan to ${name}` : `Send reminder to ${name}`}
+          why={!draft ? "Drafting…" : !amountsMatch(text, required) ? `The message must show ${required.map(money).join(" and ")} exactly` : null}
           onClick={() => {
-            update((x) => addHistory(x, d.personId, `Reminder from you: “${text}”`));
+            update((x) => addHistory(x, d.personId, `${d.plan ? "Plan" : "Reminder"} from you: “${text}”`));
             done(update, d.id);
             showToast(`Reminder sent to ${name}`);
           }}
         />
       }
     >
+      {d.learned && <Learned />}
       <div className="ai-card space-y-2 p-5">
         <div className="flex items-center gap-2 text-sm font-medium">
-          Suggested reminder <AiTag source={draft?.source} note={draft?.note} />
+          {d.plan ? "Suggested plan" : "Suggested reminder"} <AiTag source={draft?.source} note={draft?.note} />
         </div>
         {draft ? <textarea className="field min-h-[90px]" value={text} onChange={(e) => setText(e.target.value)} /> : <div className="h-[90px] animate-pulse rounded bg-card" />}
       </div>
       <button className="btn-ghost" onClick={() => done(update, d.id)}>
         Don't send
       </button>
+      <Permissions />
     </Flow>
   );
 }
@@ -367,6 +416,7 @@ function MessageReply({ d }: { d: D }) {
         </div>
         {draft ? <textarea className="field min-h-[90px]" value={text} onChange={(e) => setText(e.target.value)} /> : <div className="h-[90px] animate-pulse rounded bg-card" />}
       </div>
+      <Permissions />
     </Flow>
   );
 }
@@ -422,6 +472,7 @@ function Counter({ d }: { d: D }) {
       >
         Keep my plan
       </button>
+      <Permissions />
     </Flow>
   );
 }
