@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { Lock, Plus, Trash2, Check as CheckIcon, AlertTriangle, MessageCircle, Eye, HelpCircle } from "lucide-react";
-import { ACCOUNT, DEMO_PEOPLE, DEMO_TEXT, OWNER, countCosts, ids, newId, personName, useStore, type AppState } from "@/lib/store";
+import { ACCOUNT, DEMO_PEOPLE, DEMO_TEXT, OWNER, countCosts, ids, newId, personName, roles, shortName, useStore, type AppState } from "@/lib/store";
 import { draftSplit, type AiMeta } from "@/lib/ai";
 import { computeShares, fractionWords, money, ordinal, type Cost, type Method } from "@/lib/rules";
 import { AiTag, Flow, Primary } from "./ui";
@@ -45,8 +46,20 @@ function go(update: ReturnType<typeof useStore>["update"], stage: AppState["stag
 }
 
 function Welcome() {
-  const { update } = useStore();
+  const { update, demo } = useStore();
+  const [hide, setHide] = useState(false);
   return (
+    <>
+    {demo && !hide && (
+      <div className="mx-auto mb-6 flex max-w-[660px] items-start gap-3 rounded-lg border border-primary/30 bg-accent p-4 text-sm text-accent-foreground">
+        <span className="flex-1">
+          Demo: Meera runs a diagnostic clinic and shares ₹1.2 lakh of monthly costs with colleagues. Use Fill example on each step, then press Next in the black bar to move through the month.
+        </span>
+        <button aria-label="Dismiss" onClick={() => setHide(true)}>
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    )}
     <Flow
       title="Share a monthly cost, without the follow-ups"
       sub="The agent splits it, bills everyone each month, and helps when someone is late."
@@ -70,6 +83,7 @@ function Welcome() {
         ))}
       </div>
     </Flow>
+    </>
   );
 }
 
@@ -133,8 +147,14 @@ function PeopleStep() {
   );
 }
 
+const messyText = (s: AppState) => {
+  const r = roles(s);
+  const who = r.late ? shortName(s, r.late) : "Sukhpal";
+  return `machine ki EMI 40k, scans ke hisaab se divide, 5 tareekh ko jaati hai. rent 45000 sessions wise. salary 25k sabka barabar, 7th ko. bijli paani 10k, ${who} 2000 fixed dega baaki barabar, 20 ko`;
+};
+
 function Describe() {
-  const { s, update } = useStore();
+  const { s, update, demo } = useStore();
   const [busy, setBusy] = useState(false);
   return (
     <Flow
@@ -164,7 +184,14 @@ function Describe() {
       }
     >
       <div className="flex justify-end">
-        <Fill onClick={() => update((d) => void (d.description = DEMO_TEXT))} />
+        <div className="flex gap-2">
+          <Fill onClick={() => update((d) => void (d.description = DEMO_TEXT))} />
+          {demo && (
+            <button className="chip border-dashed border-ai/40 text-ai" onClick={() => update((d) => void (d.description = messyText(d)))}>
+              Try a messy one
+            </button>
+          )}
+        </div>
       </div>
       <textarea
         className="field min-h-[180px] text-base leading-relaxed"

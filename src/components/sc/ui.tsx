@@ -4,8 +4,9 @@ import type { Source } from "@/lib/ai";
 import { useStore } from "@/lib/store";
 
 export function AiTag({ source, note }: { source?: Source; note?: string }) {
+  const { demo } = useStore();
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2 py-0.5 text-[11px] font-semibold text-ai" title={note}>
+    <span className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2 py-0.5 text-[11px] font-semibold text-ai" title={demo && source === "built-in" ? note : undefined}>
       <Sparkles className="h-3 w-3" /> AI{source === "built-in" ? " · built-in rules" : source === "gemini" ? " · Gemini" : ""}
     </span>
   );

@@ -191,6 +191,15 @@ export function localReadMessage(text: string, today: string): ReadResult {
 
 export const PLAN_ENDING = "Agar nahi, batao kya possible hai.";
 
+/** Costs the owner pays on the key date, e.g. { names: "technician salary", date: "2026-10-07" }. */
+export interface Reason {
+  names: string;
+  date: string;
+}
+const plural = (r: Reason) => / and /.test(r.names);
+export const reasonEn = (r: Reason) => `my ${r.names} ${plural(r) ? "go" : "goes"} out on ${fmtDate(r.date)}`;
+export const reasonHi = (r: Reason) => `Mera ${r.names} ka payment ${fmtDate(r.date)} ko hai.`;
+
 export interface WriteCtx {
   ownerName: string;
   name: string; // colleague short name e.g. "Arjun"
@@ -199,6 +208,7 @@ export interface WriteCtx {
   due?: string;
   question?: string;
   facts?: string;
+  reason?: Reason | undefined;
 }
 
 export function localWrite(kind: "plan" | "answer" | "nudge" | "due", tone: Tone, ctx: WriteCtx): string {
@@ -207,10 +217,10 @@ export function localWrite(kind: "plan" | "answer" | "nudge" | "due", tone: Tone
     const [p1, p2] = ctx.parts;
     const rest = p2 ? ` Baaki ${money(p2.amount)} ${fmtDate(p2.date)} tak chalega.` : "";
     if (tone === "warm")
-      return `${n} ji, koi baat nahi, samajh sakti hoon. Bas ek request — kya ${money(p1.amount)} ${fmtDate(p1.date)} tak bhej sakte ho? Mera salary payment 7 Oct ko hai.${rest} ${PLAN_ENDING}`;
+      return `${n} ji, koi baat nahi, samajh sakti hoon. Bas ek request — kya ${money(p1.amount)} ${fmtDate(p1.date)} tak bhej sakte ho? ${ctx.reason ? reasonHi(ctx.reason) : ""}${rest} ${PLAN_ENDING}`;
     if (tone === "direct")
-      return `${n}, ${money(p1.amount)} ${fmtDate(p1.date)} tak chahiye — mere payments due hain.${rest} ${PLAN_ENDING}`;
-    return `Dear ${n}, thank you for letting me know. Could you please pay ${money(p1.amount)} by ${fmtDate(p1.date)}?${p2 ? ` The remaining ${money(p2.amount)} can come by ${fmtDate(p2.date)}.` : ""} ${PLAN_ENDING}`;
+      return `${n}, ${money(p1.amount)} ${fmtDate(p1.date)} tak chahiye${ctx.reason ? ` — ${reasonEn(ctx.reason)}` : " — mere payments due hain"}.${rest} ${PLAN_ENDING}`;
+    return `Dear ${n}, thank you for letting me know. Could you please pay ${money(p1.amount)} by ${fmtDate(p1.date)}${ctx.reason ? `, as ${reasonEn(ctx.reason)}` : ""}?${p2 ? ` The remaining ${money(p2.amount)} can come by ${fmtDate(p2.date)}.` : ""} ${PLAN_ENDING}`;
   }
   if (kind === "answer")
     return `${n} ji, good question. ${ctx.facts ?? "The split follows what each person used this month."} Koi aur sawaal ho toh batao.`;

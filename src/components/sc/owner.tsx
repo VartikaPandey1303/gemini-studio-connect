@@ -13,12 +13,14 @@ import {
   ids,
   paidBy,
   personName,
+  roles,
   shares,
   useStore,
   type AppState,
 } from "@/lib/store";
 import { explainLine, fmtDate, money, monthMetrics, type Counts } from "@/lib/rules";
 import { write, type AiMeta } from "@/lib/ai";
+import { reasonEn } from "@/lib/ai-local";
 import { AiTag, Flow, Pill, Primary } from "./ui";
 import { ColleaguePreview } from "./Colleague";
 import { SplitCards } from "./Setup";
@@ -58,7 +60,17 @@ export function homeCards(s: AppState): HomeCard[] {
         view: `decision:${d.id}`,
         tone: "ai",
       });
-    } else if (d.kind === "nudge")
+    } else if (d.kind === "nudge" && d.learned)
+      out.push({
+        id: d.id,
+        icon: d.plan ? CalendarClock : Bell,
+        title: d.plan ? `Plan for ${n} is ready in the ${d.tone ?? "warm"} tone` : `Reminder for ${n}, 3 days before the due date`,
+        line: `Using what the agent learned in ${USAGE_MONTH}.`,
+        button: "Review",
+        view: `decision:${d.id}`,
+        tone: "ai",
+      });
+    else if (d.kind === "nudge")
       out.push({ id: d.id, icon: Bell, title: `${n} may pay late`, line: "They paid after the due date before. A friendly reminder now could help.", button: "Review", view: `decision:${d.id}`, tone: "ai" });
     else if (d.kind === "counter")
       out.push({ id: d.id, icon: CalendarClock, title: `${n} suggested other dates`, line: "See what their dates mean for your payments.", button: "Review", view: `decision:${d.id}` });
@@ -194,7 +206,7 @@ function ReplyRow({ pid }: { pid: string }) {
   useEffect(() => {
     if (inv?.status !== "question" || !inv.question || draft) return;
     const measures = countCosts(s).map((c) => c.measure);
-    const facts = `${measures.length ? `Costs split by ${measures.join(" and ")} follow how many each person actually did that month, so whoever uses the machine and rooms more pays more of those. ` : ""}Equal costs are the same for everyone. ${s.people.find((p) => p.id === "dhruv") ? "Dhruv comes in only on Tuesdays, so he does fewer scans." : ""} The split: ${s.costs.map((c) => c.name).join(", ")}.`;
+    const facts = `${measures.length ? `Costs split by ${measures.join(" and ")} follow how many each person actually did that month, so whoever uses the machine and rooms more pays more of those. ` : ""}Equal costs are the same for everyone. The split: ${s.costs.map((c) => c.name).join(", ")}.`;
     write("answer", s.tone ?? "warm", { ownerName: ACCOUNT.owner, name: n.replace(/^Dr\.?\s*/, ""), question: inv.question, facts }).then((r) => {
       setDraft(r);
       setAnswer(r.text);
@@ -576,7 +588,7 @@ export function Summary() {
           <div className="font-medium">What the agent changed</div>
           <p className="mt-2 text-sm text-muted-foreground">
             Without the plan, colleagues by the due date would have been <span className="num text-foreground">{m.pctWithoutPlan}%</span> ({money(m.colNoPlan)} of {money(colTotal)}). The plan brought{" "}
-            <span className="num text-foreground">{money(planIn)}</span> in before the due date — exactly the shortfall before your 7 Oct salary.
+            <span className="num text-foreground">{money(planIn)}</span> in before the due date — {s.plans[roles(s).asker ?? ""]?.reason ? `exactly the shortfall before ${reasonEn(s.plans[roles(s).asker ?? ""]!.reason!).replace(/^my/, "your")}.` : "covering the shortfall before your own payments."}
           </p>
         </div>
       )}

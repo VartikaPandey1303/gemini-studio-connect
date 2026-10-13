@@ -1,25 +1,18 @@
-# Gemini Studio Connect
+# Shared Collect — a Razorpay Agent Studio agent for shared monthly costs
 
-can we also have it like working.. we can connect this to google gemini free api ..
-Note that.. the whole experiecne shoild be like how razorpays interface of agent studio is
+Small businesses that share fixed monthly costs (a machine EMI, rent, a salary) chase colleagues for their share every month.
+Shared Collect turns a plain-language description into a split, bills everyone through Razorpay Invoices, and helps when someone asks for more time.
+**AI reads and proposes. Rules compute every rupee. You approve.**
 
-This project was built with [Lovable](https://lovable.dev).
+## Run the demo
 
-## Build with Lovable
+1. Open the app with `?demo` at the end of the address (e.g. `https://gemini-finance-flow.lovable.app/?demo`).
+2. Use **Fill example** on each setup step (or enter your own colleagues and costs).
+3. Press **Next** in the black demo bar to move through the month. Use the dropdown to see a colleague's phone, and **AI log** to see every AI call.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/0adecf58-dfae-477e-8622-1413469d8830).
+## How the AI works
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
+- Google Gemini runs on the server through Lovable AI — it reads the cost description, reads WhatsApp replies (including Hinglish) and drafts messages.
+- Every amount comes from the rules engine in `src/lib/rules.ts` (tested in `src/lib/rules.test.ts`). The AI never calculates money.
+- Any AI message whose ₹ amounts differ from the rules is rejected.
+- If the AI is unavailable, built-in rules take over and the screen shows "AI · built-in rules".

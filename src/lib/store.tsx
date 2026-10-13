@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Question, ReadResult, Tone } from "./ai-local";
+import type { Question, ReadResult, Reason, Tone } from "./ai-local";
 import type { AiMeta } from "./ai";
 import { computeShares, keyDate, outflows, type Cost, type Counts, type Inflow, type Part, type Payment } from "./rules";
 
@@ -27,6 +27,7 @@ export interface Plan {
   parts: Part[];
   status: "offered" | "accepted";
   message: string;
+  reason?: Reason | undefined;
 }
 export type DecisionKind = "more-time" | "message" | "nudge" | "counter";
 export interface Decision {
@@ -38,6 +39,12 @@ export interface Decision {
   status: "open" | "done";
   read?: ReadResult & AiMeta;
   counter?: Part[];
+  learned?: boolean;
+  amount?: number;
+  due?: string;
+  plan?: Part[];
+  reason?: Reason | undefined;
+  tone?: Tone;
 }
 export interface HistoryItem {
   date: string;
@@ -119,7 +126,6 @@ export const DEMO_COUNTS: Counts = {
   scans: { me: 48, bhatt: 46, arjun: 38, dhruv: 22 },
   sessions: { me: 14, bhatt: 14, arjun: 12, dhruv: 6 },
 };
-export const ARJUN_MSG = "Meera ji, is month thoda tight hai. 20 tak kar dunga, pakka.";
 
 // ---------- derived helpers ----------
 export const ids = (s: AppState) => [OWNER, ...s.people.map((p) => p.id)];
@@ -187,136 +193,252 @@ export function pay(s: AppState, id: string, amount: number, plan = false) {
 // ---------- demo timeline ----------
 interface Ev {
   date: string;
-  label: string;
+  label: (s: AppState) => string;
   wait?: (s: AppState) => string | null;
+  skip?: (s: AppState) => boolean;
   run: (s: AppState) => void;
 }
-const hasDemo = (s: AppState) => ["bhatt", "arjun", "dhruv"].every((i) => s.people.some((p) => p.id === i));
-const open = (s: AppState, kind: DecisionKind, pid: string) =>
-  s.decisions.some((d) => d.kind === kind && d.personId === pid && d.status === "open");
 
-export const TIMELINE: Ev[] = [
-  {
-    date: "2026-08-28",
-    label: "Colleagues reply to the split",
-    wait: (s) => (!hasDemo(s) ? "Use “Fill example” in setup to run the demo" : s.stage !== "replies" && s.stage !== "live" ? "Waiting for you to send the split" : null),
-    run: (s) => {
-      const set = (id: string, inv: Invite, h: string) => {
-        if (s.invites[id]?.status === "waiting") {
-          s.invites[id] = inv;
-          addHistory(s, id, h);
+/** Demo roles come from the order colleagues were added: 1 pays on time, 2 asks for time, 3 is likely late. */
+export function roles(s: AppState): { onTime: string | null; asker: string | null; late: string | null } {
+  const p = s.people.map((x) => x.id);
+  if (p.length === 0) return { onTime: null, asker: null, late: null };
+  if (p.length === 1) return { onTime: null, asker: p[0], late: p[0] };
+  return { onTime: p[0], asker: p[1], late: p[2] ?? p[1] };
+}
+export const ownerFirst = () => ACCOUNT.owner.replace(/^Dr\.?\s*/, "");
+export const askerMessage = () => `${ownerFirst()} ji, is month thoda tight hai. 20 tak kar dunga, pakka.`;
+export const paidLateBefore = (s: AppState, id: string) =>
+  !!s.people.find((p) => p.id === id)?.lateBefore || (s.people.length >= 3 && roles(s).late === id);
+const lcFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+export const joinNames = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+
+/** Why the first part of a plan matters: the costs the owner pays on the key date. */
+export function keyReason(s: AppState, date: string): Reason | undefined {
+  const names = outflows(s.costs, OUT_MONTH)
+    .filter((o) => o.date === date)
+    .map((o) => lcFirst(o.label));
+  return names.length ? { names: joinNames(names), date } : undefined;
+}
+
+export function addMonths(iso: string, n: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+export const NEXT_DUE = addMonths(DUE_DATE, 2);
+
+/** Believable whole-number counts: owner highest, likely-late person lowest. */
+export function demoCounts(s: AppState): Counts {
+  const all = ids(s);
+  const late = roles(s).late;
+  const c: Counts = {};
+  countCosts(s).forEach((cost, i) => {
+    const m = cost.measure!;
+    const known = DEMO_COUNTS[m];
+    if (known && all.every((id) => known[id] !== undefined)) return void (c[m] = { ...known });
+    const base = [48, 14, 30][i] ?? 30;
+    const row: Record<string, number> = { [OWNER]: base };
+    s.people
+      .filter((p) => p.id !== late)
+      .forEach((p, k) => (row[p.id] = Math.max(1, Math.round(base * (0.95 - 0.13 * k)))));
+    if (late) row[late] = Math.max(1, Math.round(base * 0.4));
+    c[m] = row;
+  });
+  return c;
+}
+
+const open = (s: AppState, kind: DecisionKind, pid: string | null) =>
+  !!pid && s.decisions.some((d) => d.kind === kind && d.personId === pid && d.status === "open");
+const nm = (s: AppState, id: string | null) => (id ? personName(s, id) : "");
+
+export function timeline(s: AppState): Ev[] {
+  const r = roles(s);
+  const evs: Ev[] = [
+    {
+      date: "2026-08-28",
+      label: () => "Colleagues reply to the split",
+      wait: (x) => (!x.people.length ? "Add at least one colleague in setup" : x.stage !== "replies" && x.stage !== "live" ? "Waiting for you to send the split" : null),
+      run: (x) => {
+        const other = r.late && r.late !== r.asker ? r.late : r.onTime;
+        const measure = countCosts(x)[0]?.measure;
+        for (const p of x.people) {
+          if (x.invites[p.id]?.status !== "waiting") continue;
+          if (p.id === r.asker && other) {
+            x.invites[p.id] = { status: "question", question: `Why is my ${measure ? `${measure.replace(/s$/, "")} ` : ""}share higher than ${shortName(x, other)}'s?` };
+            addHistory(x, p.id, "Asked a question about the split");
+          } else {
+            x.invites[p.id] = { status: "accepted" };
+            addHistory(x, p.id, "Accepted the split");
+          }
         }
-      };
-      set("bhatt", { status: "accepted" }, "Accepted the split");
-      set("arjun", { status: "question", question: "Why is my scan share higher than Dhruv's?" }, "Asked a question about the split");
-      set("dhruv", { status: "accepted" }, "Accepted the split");
+      },
     },
-  },
-  {
-    date: "2026-08-28",
-    label: "Dr Arjun accepts after your answer",
-    wait: (s) => (s.invites.arjun?.status === "question" ? "Waiting for you to answer Dr Arjun" : null),
-    run: (s) => {
-      if (s.invites.arjun?.status !== "accepted") {
-        s.invites.arjun = { ...s.invites.arjun, status: "accepted" };
-        addHistory(s, "arjun", "Accepted the split");
-      }
+    {
+      date: "2026-08-28",
+      label: (x) => `${nm(x, r.asker)} accepts after your answer`,
+      skip: () => !r.asker || !(r.late !== r.asker ? r.late : r.onTime),
+      wait: (x) => (r.asker && x.invites[r.asker]?.status === "question" ? `Waiting for you to answer ${nm(x, r.asker)}` : null),
+      run: (x) => {
+        if (r.asker && x.invites[r.asker]?.status !== "accepted") {
+          x.invites[r.asker] = { ...x.invites[r.asker], status: "accepted" };
+          addHistory(x, r.asker, "Accepted the split");
+        }
+      },
     },
-  },
-  {
-    date: "2026-09-01",
-    label: "Sunita sends August's numbers",
-    wait: (s) =>
-      Object.values(s.invites).some((i) => i.status !== "accepted")
-        ? "Waiting for everyone to accept"
-        : s.stage !== "live"
-          ? "Waiting for you to open Home"
-          : null,
-    run: (s) => {
-      if (s.numbers.kind === "staff") {
-        const c: Counts = {};
-        for (const cost of countCosts(s)) c[cost.measure!] = DEMO_COUNTS[cost.measure!] ?? DEMO_COUNTS.scans;
-        s.counts = c;
-        s.countsFrom = "staff";
-      }
+    {
+      date: BILL_DATE,
+      label: (x) => (x.numbers.kind === "staff" ? `${x.numbers.staffName.replace(/\s*\(.*\)$/, "") || "Your staff"} sends ${USAGE_MONTH}'s numbers` : `${USAGE_MONTH}'s bills are ready`),
+      wait: (x) =>
+        Object.values(x.invites).some((i) => i.status !== "accepted") ? "Waiting for everyone to accept" : x.stage !== "live" ? "Waiting for you to open Home" : null,
+      run: (x) => {
+        if (x.numbers.kind === "staff" && countCosts(x).length) {
+          x.counts = demoCounts(x);
+          x.countsFrom = "staff";
+        }
+      },
     },
-  },
-  {
-    date: "2026-09-23",
-    label: "Razorpay sends invoice reminders",
-    wait: (s) => (!s.billsSent ? "Waiting for you to send the bills" : null),
-    run: (s) => s.people.forEach((p) => paidBy(s, p.id) < (s.bills?.[p.id] ?? 0) && addHistory(s, p.id, "Razorpay sent a reminder")),
-  },
-  {
-    date: "2026-09-25",
-    label: "Dr Arjun replies on WhatsApp",
-    run: (s) => {
-      if (paidBy(s, "arjun") >= (s.bills?.arjun ?? 0)) return;
-      s.decisions.push({ id: newId("d"), kind: "more-time", personId: "arjun", text: ARJUN_MSG, created: s.today, status: "open" });
-      addHistory(s, "arjun", `Said: “${ARJUN_MSG}”`);
+    {
+      date: "2026-09-23",
+      label: () => "Razorpay sends invoice reminders",
+      wait: (x) => (!x.billsSent ? "Waiting for you to send the bills" : null),
+      run: (x) => x.people.forEach((p) => paidBy(x, p.id) < (x.bills?.[p.id] ?? 0) && addHistory(x, p.id, "Razorpay sent a reminder")),
     },
-  },
-  {
-    date: "2026-09-26",
-    label: "Dr Arjun accepts the plan",
-    wait: (s) => (open(s, "more-time", "arjun") ? "Waiting for you to reply to Dr Arjun" : null),
-    run: (s) => {
-      if (s.plans.arjun?.status === "offered") {
-        s.plans.arjun.status = "accepted";
-        addHistory(s, "arjun", "Accepted the plan");
-      }
+    {
+      date: "2026-09-25",
+      label: (x) => `${nm(x, r.asker)} replies on WhatsApp`,
+      skip: () => !r.asker,
+      run: (x) => {
+        if (!r.asker || paidBy(x, r.asker) >= (x.bills?.[r.asker] ?? 0)) return;
+        const msg = askerMessage();
+        x.decisions.push({ id: newId("d"), kind: "more-time", personId: r.asker, text: msg, created: x.today, status: "open" });
+        addHistory(x, r.asker, `Said: “${msg}”`);
+      },
     },
-  },
-  {
-    date: "2026-09-27",
-    label: "Agent flags Dr Dhruv as likely late",
-    run: (s) => {
-      if (s.permissions.remind && paidBy(s, "dhruv") < (s.bills?.dhruv ?? 0))
-        s.decisions.push({ id: newId("d"), kind: "nudge", personId: "dhruv", text: "", created: s.today, status: "open" });
+    {
+      date: "2026-09-26",
+      label: (x) => `${nm(x, r.asker)} accepts the plan`,
+      skip: () => !r.asker,
+      wait: (x) => (open(x, "more-time", r.asker) ? `Waiting for you to reply to ${nm(x, r.asker)}` : null),
+      run: (x) => {
+        if (r.asker && x.plans[r.asker]?.status === "offered") {
+          x.plans[r.asker].status = "accepted";
+          addHistory(x, r.asker, "Accepted the plan");
+        }
+      },
     },
-  },
-  {
-    date: "2026-09-28",
-    label: "Dr Bhatt pays",
-    wait: (s) => (open(s, "nudge", "dhruv") ? "Waiting for you on Dr Dhruv's reminder" : null),
-    run: (s) => pay(s, "bhatt", s.bills?.bhatt ?? 0),
-  },
-  {
-    date: "2026-09-29",
-    label: "Dr Arjun pays the first part",
-    wait: (s) => (s.plans.arjun?.status === "offered" ? "Waiting for Dr Arjun to accept the plan" : null),
-    run: (s) => pay(s, "arjun", s.plans.arjun ? s.plans.arjun.parts[0].amount : s.bills?.arjun ?? 0),
-  },
-  { date: "2026-09-30", label: "Due date", run: () => {} },
-  { date: "2026-10-05", label: "You pay the EMI and rooms", run: (s) => s.outflowsPaid.push("2026-10-05") },
-  { date: "2026-10-07", label: "You pay the salary", run: (s) => s.outflowsPaid.push("2026-10-07") },
-  {
-    date: "2026-10-18",
-    label: "Dr Arjun and Dr Dhruv pay",
-    run: (s) => {
-      pay(s, "arjun", s.bills?.arjun ?? 0);
-      pay(s, "dhruv", s.bills?.dhruv ?? 0);
+    {
+      date: "2026-09-27",
+      label: (x) => `Agent flags ${nm(x, r.late)} as likely late`,
+      skip: () => !r.late || r.late === r.asker,
+      run: (x) => {
+        if (r.late && x.permissions.remind && paidBy(x, r.late) < (x.bills?.[r.late] ?? 0))
+          x.decisions.push({ id: newId("d"), kind: "nudge", personId: r.late, text: "", created: x.today, status: "open" });
+      },
     },
-  },
-  { date: "2026-10-20", label: "You pay utilities", run: (s) => s.outflowsPaid.push("2026-10-20") },
-  {
-    date: "2026-10-31",
-    label: "August closes",
-    run: (s) => {
-      s.monthClosed = true;
-      s.learned = [
-        ...(s.tone ? [{ text: `Dr Arjun gets a ${s.tone} tone`, label: "you told it" as const }] : []),
-        { text: "Dr Dhruv pays after the due date", label: "seen once" },
-        { text: "Nudge Dr Dhruv 3 days before the due date", label: "a guess" },
-      ];
+    {
+      date: "2026-09-28",
+      label: (x) => `${nm(x, r.onTime)} pays`,
+      skip: () => !r.onTime,
+      wait: (x) => (open(x, "nudge", r.late) ? `Waiting for you on ${nm(x, r.late)}'s reminder` : null),
+      run: (x) => {
+        if (r.onTime) pay(x, r.onTime, x.bills?.[r.onTime] ?? 0);
+        for (const p of x.people) if (p.id !== r.asker && p.id !== r.late) pay(x, p.id, x.bills?.[p.id] ?? 0);
+      },
     },
-  },
-];
+    {
+      date: "2026-09-29",
+      label: (x) => `${nm(x, r.asker)} pays the first part`,
+      skip: (x) => !r.asker || (!x.plans[r.asker] && r.asker === r.late),
+      wait: (x) => (r.asker && x.plans[r.asker]?.status === "offered" ? `Waiting for ${nm(x, r.asker)} to accept the plan` : null),
+      run: (x) => {
+        if (r.asker) pay(x, r.asker, x.plans[r.asker] ? x.plans[r.asker].parts[0].amount : x.bills?.[r.asker] ?? 0);
+      },
+    },
+    { date: DUE_DATE, label: () => "Due date", run: () => {} },
+    {
+      date: "2026-10-18",
+      label: (x) => `${joinNames([...new Set([r.asker, r.late].filter(Boolean) as string[])].map((id) => nm(x, id)))} pay${r.asker === r.late ? "s" : ""}`,
+      skip: () => !r.asker,
+      run: (x) => {
+        for (const id of new Set([r.asker, r.late])) if (id) pay(x, id, x.bills?.[id] ?? 0);
+      },
+    },
+  ];
+  const byDate = new Map<string, string[]>();
+  for (const o of outflows(s.costs, OUT_MONTH)) byDate.set(o.date, [...(byDate.get(o.date) ?? []), lcFirst(o.label)]);
+  for (const [date, names] of byDate)
+    evs.push({ date, label: () => `You pay ${joinNames(names)}`, run: (x) => void x.outflowsPaid.push(date) });
+  evs.sort((a, b) => a.date.localeCompare(b.date));
+  evs.push(
+    {
+      date: "2026-10-31",
+      label: () => `${USAGE_MONTH} closes`,
+      run: (x) => {
+        x.monthClosed = true;
+        x.learned = [
+          ...(x.tone && r.asker ? [{ text: `${nm(x, r.asker)} gets a ${x.tone} tone`, label: "you told it" as const }] : []),
+          ...(r.late
+            ? [
+                { text: `${nm(x, r.late)} pays after the due date`, label: "seen once" as const },
+                { text: `Nudge ${nm(x, r.late)} 3 days before the due date`, label: "a guess" as const },
+              ]
+            : []),
+        ];
+      },
+    },
+    {
+      date: "2026-11-01",
+      label: () => "September begins",
+      wait: (x) => (!x.summarySeen ? "Open the month summary first" : null),
+      run: (x) => {
+        if (r.late && x.permissions.remind)
+          x.decisions.push({ id: newId("d"), kind: "nudge", personId: r.late, text: "", created: x.today, status: "open", learned: true, amount: x.bills?.[r.late] ?? 0, due: NEXT_DUE });
+        const plan = r.asker ? x.plans[r.asker] : undefined;
+        if (r.asker && plan && x.permissions.plan)
+          x.decisions.push({
+            id: newId("d"),
+            kind: "nudge",
+            personId: r.asker,
+            text: "",
+            created: x.today,
+            status: "open",
+            learned: true,
+            plan: plan.parts.map((p) => ({ amount: p.amount, date: addMonths(p.date, 2) })),
+            reason: plan.reason ? { ...plan.reason, date: addMonths(plan.reason.date, 2) } : undefined,
+            tone: x.tone ?? "warm",
+          });
+      },
+    },
+  );
+  return evs;
+}
+
+function nextIndex(s: AppState) {
+  const tl = timeline(s);
+  let i = s.step;
+  while (tl[i]?.skip?.(s)) i++;
+  return { tl, i };
+}
 
 export function nextInfo(s: AppState): { label: string; wait: string | null } {
-  const ev = TIMELINE[s.step];
+  const { tl, i } = nextIndex(s);
+  const ev = tl[i];
   if (!ev) return { label: "Demo finished", wait: "Demo finished — press Restart" };
-  return { label: ev.label, wait: ev.wait?.(s) ?? null };
+  return { label: ev.label(s), wait: ev.wait?.(s) ?? null };
+}
+
+/** Runs the next timeline event. Returns its toast text. */
+export function advance(d: AppState): string | null {
+  const { tl, i } = nextIndex(d);
+  const ev = tl[i];
+  if (!ev) return null;
+  const label = ev.label(d);
+  if (ev.date > d.today) d.today = ev.date;
+  ev.run(d);
+  d.step = i + 1;
+  return `${label}`;
 }
 
 // ---------- context ----------
@@ -328,6 +450,7 @@ interface Ctx {
   toast: string | null;
   showToast: (t: string) => void;
   demo: boolean;
+  evalView: boolean;
 }
 const C = createContext<Ctx | null>(null);
 
@@ -335,8 +458,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<AppState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
+  const [evalView, setEval] = useState(false);
   useEffect(() => {
-    setDemo(new URLSearchParams(window.location.search).has("demo"));
+    const q = new URLSearchParams(window.location.search);
+    setDemo(q.has("demo"));
+    setEval(q.has("demo") && q.has("eval"));
     try {
       const raw = localStorage.getItem(KEY);
       const parsed = raw ? (JSON.parse(raw) as AppState) : null;
@@ -362,7 +488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const reset = useCallback(() => setS(initialState()), []);
   if (!s) return <div className="min-h-screen bg-background" />;
-  return <C.Provider value={{ s, update, reset, toast, showToast, demo }}>{children}</C.Provider>;
+  return <C.Provider value={{ s, update, reset, toast, showToast, demo, evalView }}>{children}</C.Provider>;
 }
 
 export function useStore() {
