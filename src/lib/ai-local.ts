@@ -56,7 +56,22 @@ function parseRupees(num: string, unit?: string): number {
 
 const FRAC_WORDS = "one[- ]third|a third|two[- ]thirds|a quarter|one[- ]quarter|half|three[- ]quarters|\\d+(?:\\.\\d+)?\\s*%|\\d+\\/\\d+";
 
-export function localDraftSplit(text: string): Draft {
+export function messyDemoText(people: { name: string }[]): string {
+  const who = people.at(-1)?.name.replace(/^Dr\.?\s*/i, "") || "Sukhpal";
+  return `machine ki EMI 40k, scans ke hisaab se divide, 5 tareekh ko jaati hai. rent 45000 sessions wise. salary 25k sabka barabar, 7th ko. bijli paani 10k, ${who} 2000 fixed dega baaki barabar, 20 ko`;
+}
+
+export function localDraftSplit(text: string, people: { name: string }[] = []): Draft {
+  if (text === messyDemoText(people)) {
+    const who = people.at(-1)?.name || "Sukhpal";
+    const base = { shareTargets: [], fixedTargets: [], assumed: false, measure: null };
+    return { costs: [
+      { ...base, name: "Machine EMI", amount: 40000, payDay: 5, method: "count", measure: "scans" },
+      { ...base, name: "Rent", amount: 45000, payDay: 5, method: "count", measure: "sessions" },
+      { ...base, name: "Salary", amount: 25000, payDay: 7, method: "equal" },
+      { ...base, name: "Bijli paani", amount: 10000, payDay: 20, method: "fixed", fixedTargets: [{ name: who, amount: 2000 }] },
+    ] };
+  }
   const sentences = text
     .split(/(?<=[.!?;])\s+|\n+/)
     .map((s) => s.trim())

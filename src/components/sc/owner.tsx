@@ -42,8 +42,8 @@ export function homeCards(s: AppState): HomeCard[] {
   const out: HomeCard[] = [];
   if (s.today >= BILL_DATE && !s.billsSent)
     out.push(
-      s.counts
-        ? { id: "bills", icon: Receipt, title: `${USAGE_MONTH}'s bills are ready to send`, line: `${s.numbers.staffName || "Your staff"} sent the numbers on WhatsApp.`, button: "Review bills", view: "bills" }
+      s.counts || !countCosts(s).length
+        ? { id: "bills", icon: Receipt, title: `${USAGE_MONTH}'s bills are ready to send`, line: countCosts(s).length ? `${s.numbers.staffName || "Your staff"} sent the numbers on WhatsApp.` : "Check and send everyone's bill.", button: "Review bills", view: "bills" }
         : { id: "bills", icon: Receipt, title: `${USAGE_MONTH} is over — add ${USAGE_MONTH}'s numbers`, line: "Then check and send everyone's bill.", button: "Add numbers", view: "bills" },
     );
   for (const d of s.decisions.filter((x) => x.status === "open")) {
@@ -305,10 +305,10 @@ function parseCsv(text: string, s: AppState): { counts: Counts; ignored: string[
 
 export function Bills() {
   const { s, update, showToast } = useStore();
-  const [step, setStep] = useState<"numbers" | "review">(s.counts ? "review" : "numbers");
+  const [step, setStep] = useState<"numbers" | "review">(s.counts || !countCosts(s).length ? "review" : "numbers");
   const [open, setOpen] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const measures = countCosts(s).map((c) => c.measure!);
+  const measures = countCosts(s).map((c) => c.measure ?? "");
   const counts = s.counts ?? {};
   const missing = measures.some((m) => ids(s).some((id) => counts[m]?.[id] === undefined));
   if (step === "numbers" || !measures.every((m) => counts[m]))

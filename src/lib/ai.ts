@@ -21,7 +21,7 @@ function track(action: AiAction, input: string, t0: number, source: Source, outp
     time: new Date().toISOString(),
     action,
     input: input.slice(0, 400),
-    output: (typeof output === "string" ? output : JSON.stringify(output)).slice(0, 600),
+    output: typeof output === "string" ? output : JSON.stringify(output),
     source,
     latencyMs: Date.now() - t0,
     rejected,
@@ -48,10 +48,10 @@ async function draftSplitRaw(text: string, people: { id: string; name: string }[
       const d = finalizeDraft(r.data as Draft, people);
       if (d.costs.length) return done({ ...d, meta: { source: "gemini" as Source } as AiMeta });
     }
-    const local = finalizeDraft(localDraftSplit(text), people);
+    const local = finalizeDraft(localDraftSplit(text, people), people);
     return done({ ...local, meta: { source: "built-in" as Source, note: r.ok ? "AI found no costs" : r.error } as AiMeta });
   } catch (e) {
-    const local = finalizeDraft(localDraftSplit(text), people);
+    const local = finalizeDraft(localDraftSplit(text, people), people);
     return done({ ...local, meta: { source: "built-in" as Source, note: (e as Error).message } as AiMeta });
   }
 }

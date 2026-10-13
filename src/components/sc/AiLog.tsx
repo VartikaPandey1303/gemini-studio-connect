@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { clearLogs, readLogs, summarize, type AiLogEntry } from "@/lib/ai-log";
+import { clearLogs, readLogs, readableOutput, summarize, type AiLogEntry } from "@/lib/ai-log";
 import { AiTag } from "./ui";
 
 export function AiLog() {
@@ -47,7 +47,7 @@ export function AiLog() {
                 <td className="num p-3 whitespace-nowrap">{new Date(l.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
                 <td className="p-3">{l.action}</td>
                 <td className="max-w-[220px] p-3 text-muted-foreground">{l.input.slice(0, 140)}</td>
-                <td className="max-w-[260px] p-3">{l.output.slice(0, 180)}</td>
+                <td className="max-w-[260px] p-3"><div className="max-w-[260px] truncate" title={readableOutput(l)}>{readableOutput(l)}</div></td>
                 <td className="p-3">
                   <AiTag source={l.source} note={l.reason} />
                 </td>
