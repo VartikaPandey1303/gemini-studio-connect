@@ -38,8 +38,8 @@ function Owner() {
 }
 
 function App() {
-  const { s } = useStore();
-  if (!useStore().evalView && s.role !== OWNER && s.people.some((p) => p.id === s.role))
+  const { s, evalView } = useStore();
+  if (!evalView && s.role !== OWNER && s.people.some((p) => p.id === s.role))
     return (
       <PhoneFrame>
         <ColleaguePage pid={s.role} />
